@@ -1,12 +1,14 @@
 # Imports
 import os
 import requests
-import csv
 from time import perf_counter, strftime
 from multiprocessing import Pool
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import matplotlib.pyplot as plt
 
 # Internal imports
-from .utils import allowed_file_extensions, desired_img_extensions, log, protocols
+from .utils import allowed_file_extensions, log, protocols, request_header
 
 # -----------------------------------------------------------------------------------
 
@@ -14,13 +16,13 @@ class LogoCrawler:
     def __init__(self, filename=None, threads_num=1, output_file="output.csv", metrics_file="metrics.csv", verbose=False):
         # Crawler properties
         self.threads_num = threads_num  # Number of concurrent processes
-        self.timeout_time = 10  # Define timeout time
+        self.timeout_time = 5  # Define timeout time
         self.verbose = verbose
         self.output_file = output_file
         self.metrics_file = metrics_file
 
         # Crawler variables
-        self.url_list = []  # List of all urls to be fetched
+        self.domains_list = []  # List of all urls to be fetched
         self.results = []   # Results from fetched urls
         log("Crawler initialized.")
         
@@ -30,17 +32,25 @@ class LogoCrawler:
         self.run()
     
     def run(self):
-        log(f"Running Crawler with {self.threads_num} threads for {len(self.url_list)} URLs.")
+        log(f"Running Crawler using {self.threads_num} thread(s) for {len(self.domains_list)} name domains.")
         self.app_start_time = perf_counter()
         with Pool(processes=self.threads_num) as pool:
-            results = pool.map(self.fetchURL, self.url_list)
+            results = pool.map(self.fetchDomain, self.domains_list)
         self.exportResults(results)
         self.exportMetrics(results)
+        
+        # Finish
+        app_end_time = perf_counter()
+        total_time = app_end_time - self.app_start_time
+        hours = int(total_time // 3600)
+        minutes = int((total_time % 3600) // 60)
+        seconds = total_time % 60
+        print(f"Crawler finished in {hours}h {minutes}m {seconds:.2f}s")
         
     def setInputFile(self, filename):
         self.checkFileExtension(filename)
         if self.filenameExists(filename):
-            log(f"Sucessfully defined `{filename}` as input file.")
+            log(f"Successfully defined `{filename}` as input file.")
             self.filename = filename
         else:
             raise FileNotFoundError(f"Provided filename `{filename}` does not exist. Please provide a valid filename.")
@@ -51,46 +61,140 @@ class LogoCrawler:
             raise ValueError(f"Unsupported extension `{ext}`. Expected of of: {', '.join(allowed_file_extensions)}")
 
     def filenameExists(self, filename):
-        if os.path.exists(filename):
-            return True
-        else:
-            return False
+        return os.path.exists(filename)
     
     def readCompleteInputFile(self):
         with open(self.filename) as f:
             content = f.readlines()
-        self.url_list = [x.strip() for x in content]
-        log("Sucessfully read domain names from input file.")
+        self.domains_list = [x.strip() for x in content]
+        log("Successfully read domain names from input file.")
     
-    def fetchURL(self, url):
-        if self.verbose: log(f"Fetching: {url}")
-        try:
-            response = requests.get(url, timeout=self.timeout_time)
-            if response:
-                logo_url = self.getLogoURL(response)
+    def fetchDomain(self, domain: str):
+        if self.verbose: log(f"Fetching: {domain}")
+        
+        last_exception = None
+        response = None
+        logo_link = None
+        header_type = None
+        url = None
+        message = None
+        
+        # Try 'http' and 'https' and 'no' protocols
+        for protocol in protocols:
+            url = protocol + domain
+            # Try headed and headless requests
+            try:
+                # Headed request
+                response = requests.get(url, timeout=self.timeout_time, headers=request_header)
+                if response:
+                    header_type = "headed"
+                    break                    
+                else:
+                    # Headless request if failed headed request
+                    response = response = requests.get(url, timeout=self.timeout_time)
+                    if response:
+                        header_type = "headless"
+                        break
                 
-                return {"url": url,
-                        "logo_url": logo_url,
-                        "success": True,
-                        "message": "success"
-                        }
-        except Exception as e:
-            return {"url": url,
-                    "logo_url": None,
-                    "success": False,
-                    "message": str(e)
-                    }
+            except Exception as e:
+                last_exception = f"Error {e.__class__.__name__}"
+                if hasattr(e, 'response') and e.response is not None:
+                    last_exception = f"{e.response.status_code}"
+        
+        if response:
+            logo_link, message = self.parseLogoLink(response)
+        
+        return {"url": url if response else domain,                                     # The URL with protocol (e.g., "https://example.com")
+                            "logo_link": f"{logo_link}",                                # URL to the logo image or None if not found
+                            "success": True if logo_link else False,                    # Boolean: True if found logo_link, False otherwise
+                            "request_type": header_type if response else None,          # String: "headed" when using headers, "headless" without headers
+                            "message": "success" if logo_link else f"{last_exception}"  # String: success message or error description
+                            }
     
-    def getLogoURL(self, response):
-        return "https://example.com/logo.png"
+    def parseLogoLink(self, response: requests.Response):
+        soup = BeautifulSoup(response.text, 'html.parser')
+        base_url = response.url
 
+        # Tenta encontrar logo em <img> com id ou classe 'logo'
+        img_tags = soup.find_all('img')
+        for img_tag in img_tags:
+            classes = img_tag.get('class', [])
+            if img_tag.get('id') == 'logo' or any('logo' in c.lower() for c in classes):
+                src = img_tag.get('src')
+                if src:
+                    logo_url = urljoin(base_url, src)
+                    return logo_url, "success"
+
+        # Tenta encontrar ícone no <link rel="icon" ou shortcut icon>
+        link_icons = soup.find_all('link', rel=lambda x: x and 'icon' in x.lower())
+        for link_tag in link_icons:
+            href = link_tag.get('href')
+            if href:
+                logo_url = urljoin(base_url, href)
+                return logo_url, "success"
+
+        # Tenta encontrar meta property og:image
+        meta_og = soup.find('meta', property='og:image')
+        if meta_og:
+            content = meta_og.get('content')
+            if content:
+                logo_url = urljoin(base_url, content)
+                return logo_url, "success"
+
+        return None, "not_found"
+        
     def exportResults(self, results: list):
+        log(f"Exporting results to output/{self.output_file}")
+        
+        # Create output directory if it doesn't exist
+        os.makedirs("output", exist_ok=True)
+        
+        self.output_file = f"output/{self.output_file}"
+        
+        # Output each result to output file
         with open(self.output_file, "w+") as f:
-            fieldnames = ['url', 'logo_url', 'success', 'message']
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
+            # Write header row
+            f.write("url, success, logo_link, request_type, message\n")
+            # Results            
             for result in results:
-                writer.writerow(result)
+                f.write(f"{result['url']}, {result['success']}, \"{result['logo_link']}\", {result['request_type']}, \"{result['message']}\"\n")
 
     def exportMetrics(self, results: list):
-        pass
+        log(f"Exporting metrics to {self.metrics_file}")
+
+        # Create output directory if it doesn't exist
+        metrics_path = os.path.join('output', self.metrics_file)
+        os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
+        self.metrics_file = metrics_path
+
+        # Calculate metrics
+        total_requests = len(results)
+        successful_requests = sum(1 for r in results if r['success'])
+        success_rate = (successful_requests / total_requests) * 100 if total_requests > 0 else 0
+
+        # Count request types
+        headed_requests = sum(1 for r in results if r['request_type'] == 'headed')
+        headless_requests = sum(1 for r in results if r['request_type'] == 'headless')
+        failed_requests = sum(1 for r in results if r['request_type'] is None)
+
+        # Common error messages
+        error_types = {}
+        for result in results:
+            if not result['success']:
+                error_msg = result['message']
+                error_types[error_msg] = error_types.get(error_msg, 0) + 1
+
+        # Write metrics to file
+        with open(self.metrics_file, "w+") as f:
+            f.write(f"Total domains processed: {total_requests}\n")
+            f.write(f"Successful logo extractions: {successful_requests} ({success_rate:.2f}%)\n")
+            f.write(f"Failed extractions: {total_requests - successful_requests} ({100 - success_rate:.2f}%)\n\n")
+            
+            f.write("Request Types:\n")
+            f.write(f"- Headed requests: {headed_requests} ({headed_requests/total_requests*100:.2f}%)\n")
+            f.write(f"- Headless requests: {headless_requests} ({headless_requests/total_requests*100:.2f}%)\n")
+            f.write(f"- Failed requests: {failed_requests} ({failed_requests/total_requests*100:.2f}%)\n\n")
+            
+            f.write("Common error messages:\n")
+            for error, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
+                f.write(f"- {error}: {count} ({count/total_requests*100:.2f}%)\n")

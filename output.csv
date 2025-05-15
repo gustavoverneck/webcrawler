@@ -1,0 +1,3 @@
+url,logo_url,success,message
+www.dom.cnt.br,,False,Invalid URL 'www.dom.cnt.br': No scheme supplied. Perhaps you meant https://www.dom.cnt.br?
+whitepages.com,,False,Invalid URL 'whitepages.com': No scheme supplied. Perhaps you meant https://whitepages.com?

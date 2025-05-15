@@ -1,14 +1,11 @@
 from logocrawler import LogoCrawler
-
-print(__name__)
+#from logocrawler import Test
 
 if __name__ == "__main__":
-    filename = "websites.csv"
-
-    # Initialize Crawler Object
-    crawler = LogoCrawler(filename)
-
-    # Read domains
-    crawler.readNameDomains()
-
+    # Define filename
+    #filename_ = "websites.csv"
+    filename_ = "test_list.dat"
+    threads_num_ = 1
     
+    # Initialize Crawler Object
+    crawler = LogoCrawler(filename=filename_, threads_num=threads_num_, verbose=True)

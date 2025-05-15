@@ -1,2 +1,2 @@
 # webcrawler
-web crawler for logo links
+web crawler for logo links for mixrank

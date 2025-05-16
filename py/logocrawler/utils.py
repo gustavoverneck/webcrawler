@@ -2,8 +2,6 @@ from time import strftime
 
 allowed_file_extensions = ["txt", "csv", "dat"]
 
-desired_img_extensions = ["png"]
-
 protocols = ["https://www.", "http://www.", "www."]
 
 request_header = HEADERS = {

@@ -115,7 +115,36 @@ class LogoCrawler:
         soup = BeautifulSoup(response.text, 'html.parser')
         base_url = response.url
 
-        # Tenta encontrar logo em <img> com id ou classe 'logo'
+        # Search order: common_paths -> og:image -> img_logo -> favicon
+        
+        # Common Paths
+        common_logo_paths = [
+            "/logo.png", 
+            "/images/logo.png", 
+            "/static/logo.svg", 
+            "/assets/logo.png", 
+            "/img/logo.png"
+            ]
+        
+        # Try to find logo in common paths
+        for path in common_logo_paths:
+            logo_url = urljoin(base_url, path)
+            try:
+                res = requests.head(logo_url, timeout=5)
+                if res.status_code == 200 and 'image' in res.headers.get('Content-Type', ''):
+                    return logo_url, "common_path"
+            except:
+                continue
+            
+        # Try to find logo in meta og:image tag or content
+        meta_og_tags = soup.find('meta', property='og:image')
+        if meta_og_tags:
+            content = meta_og_tags.get('content')
+            if content:
+                logo_url = urljoin(base_url, content)
+                return logo_url, "og_image"
+
+        # Try to find logo in <img> with id='logo' or class='logo'
         img_tags = soup.find_all('img')
         for img_tag in img_tags:
             classes = img_tag.get('class', [])
@@ -123,24 +152,17 @@ class LogoCrawler:
                 src = img_tag.get('src')
                 if src:
                     logo_url = urljoin(base_url, src)
-                    return logo_url, "success"
+                    return logo_url, "img_logo"
 
-        # Tenta encontrar ícone no <link rel="icon" ou shortcut icon>
+        # Try to find icon in <link rel="icon"> or <link rel="shortcut icon">
         link_icons = soup.find_all('link', rel=lambda x: x and 'icon' in x.lower())
         for link_tag in link_icons:
             href = link_tag.get('href')
             if href:
                 logo_url = urljoin(base_url, href)
-                return logo_url, "success"
+                return logo_url, "favicon"
 
-        # Tenta encontrar meta property og:image
-        meta_og = soup.find('meta', property='og:image')
-        if meta_og:
-            content = meta_og.get('content')
-            if content:
-                logo_url = urljoin(base_url, content)
-                return logo_url, "success"
-
+        # Failed: logo not found
         return None, "not_found"
         
     def exportResults(self, results: list):

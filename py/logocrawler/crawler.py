@@ -5,7 +5,6 @@ from time import perf_counter, strftime
 from multiprocessing import Pool
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-import matplotlib.pyplot as plt
 
 # Internal imports
 from .utils import allowed_file_extensions, log, protocols, request_header
@@ -77,7 +76,7 @@ class LogoCrawler:
         logo_link = None
         header_type = None
         url = None
-        message = None
+        message = "not_attempted"
         
         # Try 'http' and 'https' and 'no' protocols
         for protocol in protocols:
@@ -108,7 +107,7 @@ class LogoCrawler:
                             "logo_link": f"{logo_link}",                                # URL to the logo image or None if not found
                             "success": True if logo_link else False,                    # Boolean: True if found logo_link, False otherwise
                             "request_type": header_type if response else None,          # String: "headed" when using headers, "headless" without headers
-                            "message": "success" if logo_link else f"{last_exception}"  # String: success message or error description
+                            "message": message if logo_link else f"{last_exception}"  # String: success message or error description
                             }
     
     def parseLogoLink(self, response: requests.Response):
@@ -199,18 +198,28 @@ class LogoCrawler:
         headless_requests = sum(1 for r in results if r['request_type'] == 'headless')
         failed_requests = sum(1 for r in results if r['request_type'] is None)
 
+        # Categorize failures
+        connection_failures = sum(1 for r in results if not r['success'] and r['request_type'] is None)
+        not_found_failures = sum(1 for r in results if not r['success'] and r['message'] == "not_found")
+        other_failures = (total_requests - successful_requests) - (connection_failures + not_found_failures)
+
         # Common error messages
         error_types = {}
         for result in results:
             if not result['success']:
                 error_msg = result['message']
                 error_types[error_msg] = error_types.get(error_msg, 0) + 1
-
+        
         # Write metrics to file
         with open(self.metrics_file, "w+") as f:
             f.write(f"Total domains processed: {total_requests}\n")
             f.write(f"Successful logo extractions: {successful_requests} ({success_rate:.2f}%)\n")
             f.write(f"Failed extractions: {total_requests - successful_requests} ({100 - success_rate:.2f}%)\n\n")
+            
+            f.write("Failure Breakdown:\n")
+            f.write(f"- Connection failures: {connection_failures} ({connection_failures/total_requests*100:.2f}%)\n")
+            f.write(f"- Logo not found: {not_found_failures} ({not_found_failures/total_requests*100:.2f}%)\n")
+            f.write(f"- Other failures: {other_failures} ({other_failures/total_requests*100:.2f}%)\n\n")
             
             f.write("Request Types:\n")
             f.write(f"- Headed requests: {headed_requests} ({headed_requests/total_requests*100:.2f}%)\n")

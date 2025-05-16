@@ -2,8 +2,8 @@ from logocrawler import LogoCrawler
 
 if __name__ == "__main__":
     # Define filename
-    #filename_ = "websites.csv"
-    filename_ = "test_list.dat"
+    filename_ = "websites.csv"
+    
     threads_num_ = 8
     
     # Initialize Crawler Object

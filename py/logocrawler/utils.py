@@ -17,7 +17,7 @@ request_header = HEADERS = {
         "DNT": "1",
     }
 
-def log(message):
+def log(message: str):
     timestamp = strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}")
         

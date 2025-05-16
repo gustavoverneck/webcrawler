@@ -1,15 +1,21 @@
-Total domains processed: 100
-Successful logo extractions: 69 (69.00%)
-Failed extractions: 31 (31.00%)
+Total domains processed: 1000
+Successful logo extractions: 734 (73.40%)
+Failed extractions: 266 (26.60%)
+
+Failure Breakdown:
+- Connection failures: 199 (19.90%)
+- Logo not found: 0 (0.00%)
+- Other failures: 67 (6.70%)
 
 Request Types:
-- Headed requests: 81 (81.00%)
-- Headless requests: 0 (0.00%)
-- Failed requests: 19 (19.00%)
+- Headed requests: 790 (79.00%)
+- Headless requests: 11 (1.10%)
+- Failed requests: 199 (19.90%)
 
 Common error messages:
-- Error MissingSchema: 19 (19.00%)
-- None: 7 (7.00%)
-- Error SSLError: 3 (3.00%)
-- Error ConnectionError: 1 (1.00%)
-- Error ConnectTimeout: 1 (1.00%)
+- Error MissingSchema: 199 (19.90%)
+- None: 57 (5.70%)
+- Error SSLError: 6 (0.60%)
+- Error ConnectionError: 2 (0.20%)
+- Error ReadTimeout: 1 (0.10%)
+- Error ConnectTimeout: 1 (0.10%)
